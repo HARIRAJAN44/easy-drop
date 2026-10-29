@@ -2,7 +2,7 @@
   "name": "easy-drop",
   "version": "1.0.0",
   "private": true,
-  "description": "A temporary file drop for your local network, with an optional public link.",
+  "description": "A temporary file and text drop for your local network, with an optional public link.",
   "main": "server.js",
   "scripts": {
     "start": "node tunnel.js",

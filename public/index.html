@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#f4f6fc" />
     <meta
       name="description"
-      content="Easy Drop is a temporary file drop for your network and the web."
+      content="Easy Drop is a temporary file and text drop for your network and the web."
     />
     <title>Easy Drop</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -47,11 +47,12 @@
 
       <main>
         <section class="intro">
-          <p class="eyebrow">Easy file sharing</p>
+          <p class="eyebrow">Easy file &amp; text sharing</p>
           <h1>Drop files.<br /><span class="accent-text">Share anywhere.</span></h1>
           <p class="lede">
-            One shared drop for every device. Send over your Wi-Fi or through a
-            temporary public link. Files disappear when the app closes.
+            One shared drop for every device. Send files and share text over
+            your Wi-Fi or through a temporary public link. Everything disappears
+            when the app closes.
           </p>
           <ul class="intro-badges">
             <li>No sign-up</li>
@@ -123,38 +124,67 @@
             </div>
           </section>
 
-          <aside class="card connect-card" id="connectCard" hidden>
-            <div class="qr-shell">
-              <div class="qr-code" id="qrCode"></div>
-            </div>
-            <p class="connect-kicker">Open on another device</p>
-            <button
-              class="address-button"
-              id="copyAddress"
-              type="button"
-              title="Copy address"
-            >
-              <span id="addressText">Finding address...</span>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect
-                  x="9"
-                  y="9"
-                  width="11"
-                  height="11"
-                  rx="2"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                />
-                <path
-                  d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                />
-              </svg>
-            </button>
-            <p class="connect-hint">Scan or type this address to join the drop.</p>
-            <div class="address-list" id="addressList"></div>
-          </aside>
+          <div class="side-column">
+            <section class="card notes-card" aria-labelledby="notesTitle">
+              <div class="notes-head">
+                <div>
+                  <h2 id="notesTitle">Shared text</h2>
+                  <p class="notes-meta">Auto-saves to every device</p>
+                </div>
+                <button class="note-add" id="addNote" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 5v14M5 12h14"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  New
+                </button>
+              </div>
+
+              <div class="notes-list" id="notesList" aria-live="polite">
+                <div class="notes-empty">
+                  <p>No notes yet</p>
+                  <span>Paste text to share it with every device.</span>
+                </div>
+              </div>
+            </section>
+
+            <aside class="card connect-card" id="connectCard" hidden>
+              <div class="qr-shell">
+                <div class="qr-code" id="qrCode"></div>
+              </div>
+              <p class="connect-kicker">Open on another device</p>
+              <button
+                class="address-button"
+                id="copyAddress"
+                type="button"
+                title="Copy address"
+              >
+                <span id="addressText">Finding address...</span>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect
+                    x="9"
+                    y="9"
+                    width="11"
+                    height="11"
+                    rx="2"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  />
+                  <path
+                    d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  />
+                </svg>
+              </button>
+              <p class="connect-hint">Scan or type this address to join the drop.</p>
+              <div class="address-list" id="addressList"></div>
+            </aside>
+          </div>
         </div>
 
         <section class="files-section" aria-labelledby="filesTitle">

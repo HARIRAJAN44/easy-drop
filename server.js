@@ -24,9 +24,15 @@ const MAX_FILE_MB =
     : 5120;
 const MAX_FILE_BYTES = Math.floor(MAX_FILE_MB * 1024 * 1024);
 
+const MAX_NOTES = 50;
+const MAX_NOTE_CHARS = 20000;
+const MAX_NOTE_BODY_BYTES = 256 * 1024;
+
 const files = new Map();
+const notes = new Map();
 const startedAt = Date.now();
 let totalBytes = 0;
+let notesRevision = 0;
 let sessionDir = '';
 let server = null;
 let shuttingDown = false;
@@ -235,6 +241,212 @@ function getAllFiles() {
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(serializeFile);
 }
+
+function serializeNote(note) {
+  return {
+    id: note.id,
+    text: note.text,
+    createdAt: new Date(note.createdAt).toISOString(),
+    updatedAt: new Date(note.updatedAt).toISOString(),
+  };
+}
+
+function getAllNotes() {
+  return [...notes.values()]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(serializeNote);
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let tooLarge = false;
+
+    req.on('data', (chunk) => {
+      if (tooLarge) return;
+
+      size += chunk.length;
+      if (size > MAX_NOTE_BODY_BYTES) {
+        tooLarge = true;
+        chunks.length = 0;
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      if (tooLarge) {
+        const error = new Error('That text is too long.');
+        error.status = 413;
+        reject(error);
+        return;
+      }
+
+      if (size === 0) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        const error = new Error('Invalid JSON body.');
+        error.status = 400;
+        reject(error);
+      }
+    });
+
+    req.on('error', reject);
+  });
+}
+
+function parseNoteText(body) {
+  if (!body || typeof body.text !== 'string') {
+    const error = new Error('Text is required.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (body.text.length > MAX_NOTE_CHARS) {
+    const error = new Error(
+      `Text is too long. The limit is ${MAX_NOTE_CHARS.toLocaleString()} characters.`,
+    );
+    error.status = 413;
+    throw error;
+  }
+
+  return body.text;
+}
+
+async function handleListNotes(req, res, requestUrl) {
+  const rawRevision = requestUrl.searchParams.get('rev');
+  const revision = rawRevision === null ? null : Number(rawRevision);
+
+  if (Number.isInteger(revision) && revision === notesRevision) {
+    if (res.writableEnded || res.destroyed) return;
+    res.writeHead(204, {
+      ...SECURITY_HEADERS,
+      'Cache-Control': 'no-store',
+    });
+    res.end();
+    return;
+  }
+
+  sendJson(res, 200, {
+    revision: notesRevision,
+    notes: getAllNotes(),
+  });
+}
+
+async function handleCreateNote(req, res) {
+  if (req.headers['x-easy-drop'] !== '1') {
+    req.resume();
+    sendJson(res, 403, { error: 'Missing Easy Drop request header.' });
+    return;
+  }
+
+  if (notes.size >= MAX_NOTES) {
+    req.resume();
+    sendJson(res, 409, {
+      error: `You can keep up to ${MAX_NOTES} notes at a time.`,
+    });
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, error.status || 400, { error: error.message });
+    return;
+  }
+
+  let text;
+  try {
+    text = parseNoteText(body);
+  } catch (error) {
+    sendJson(res, error.status || 400, { error: error.message });
+    return;
+  }
+
+  const now = Date.now();
+  const note = {
+    id: crypto.randomUUID(),
+    text,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  notes.set(note.id, note);
+  notesRevision += 1;
+
+  sendJson(res, 201, {
+    note: serializeNote(note),
+    revision: notesRevision,
+  });
+}
+
+async function handleUpdateNote(req, res, id) {
+  if (req.headers['x-easy-drop'] !== '1') {
+    req.resume();
+    sendJson(res, 403, { error: 'Missing Easy Drop request header.' });
+    return;
+  }
+
+  const note = notes.get(id);
+  if (!note) {
+    req.resume();
+    sendJson(res, 404, { error: 'Note not found.' });
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (error) {
+    sendJson(res, error.status || 400, { error: error.message });
+    return;
+  }
+
+  let text;
+  try {
+    text = parseNoteText(body);
+  } catch (error) {
+    sendJson(res, error.status || 400, { error: error.message });
+    return;
+  }
+
+  note.text = text;
+  note.updatedAt = Date.now();
+  notesRevision += 1;
+
+  sendJson(res, 200, {
+    note: serializeNote(note),
+    revision: notesRevision,
+  });
+}
+
+async function handleDeleteNote(req, res, id) {
+  if (req.headers['x-easy-drop'] !== '1') {
+    req.resume();
+    sendJson(res, 403, { error: 'Missing Easy Drop request header.' });
+    return;
+  }
+
+  if (!notes.has(id)) {
+    req.resume();
+    sendJson(res, 404, { error: 'Note not found.' });
+    return;
+  }
+
+  notes.delete(id);
+  notesRevision += 1;
+
+  sendJson(res, 200, { ok: true, revision: notesRevision });
+}
+
 
 function sendJson(res, status, data, extraHeaders = {}) {
   if (res.writableEnded || res.destroyed) return;
@@ -581,6 +793,38 @@ async function handleRequest(req, res) {
     }
     await handleDownload(req, res, parts[1]);
     return;
+  }
+
+  if (parts[0] === 'api' && parts[1] === 'notes') {
+    if (parts.length === 2) {
+      if (method === 'POST') {
+        await handleCreateNote(req, res);
+        return;
+      }
+
+      if (method !== 'GET' && method !== 'HEAD') {
+        sendJson(res, 405, { error: 'Method not allowed.' });
+        return;
+      }
+
+      await handleListNotes(req, res, requestUrl);
+      return;
+    }
+
+    if (parts.length === 3) {
+      if (method === 'PATCH' || method === 'PUT') {
+        await handleUpdateNote(req, res, parts[2]);
+        return;
+      }
+
+      if (method === 'DELETE') {
+        await handleDeleteNote(req, res, parts[2]);
+        return;
+      }
+
+      sendJson(res, 405, { error: 'Method not allowed.' });
+      return;
+    }
   }
 
   if (parts[0] === 'api' && parts[1] === 'files') {

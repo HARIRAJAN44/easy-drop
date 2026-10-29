@@ -23,6 +23,8 @@ const elements = {
   filesMeta: document.getElementById('filesMeta'),
   clearAll: document.getElementById('clearAll'),
   fileList: document.getElementById('fileList'),
+  addNote: document.getElementById('addNote'),
+  notesList: document.getElementById('notesList'),
   footerBadge: document.getElementById('footerBadge'),
   toast: document.getElementById('toast'),
 };
@@ -36,7 +38,12 @@ const state = {
   selectedUrl: '',
   networkSignature: '',
   liveFailures: 0,
+  notes: [],
+  notesRevision: -1,
+  noteEdits: new Map(),
 };
+
+let notesRequestId = 0;
 
 const upload = {
   queue: [],
@@ -54,6 +61,13 @@ const downloadIcon = `
 const trashIcon = `
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+`;
+
+const copyIcon = `
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.8"/>
   </svg>
 `;
 
@@ -383,6 +397,17 @@ function updateRelativeTimes() {
   for (const element of elements.fileList.querySelectorAll('[data-created]')) {
     element.textContent = relativeTime(element.dataset.created);
   }
+
+  if (!elements.notesList) return;
+
+  for (const note of elements.notesList.querySelectorAll(
+    '.note:not(.is-dirty)',
+  )) {
+    const status = note.querySelector('.note-status');
+    if (status?.dataset.updated) {
+      status.textContent = `Saved · ${relativeTime(status.dataset.updated)}`;
+    }
+  }
 }
 
 function openFilePicker() {
@@ -661,6 +686,347 @@ async function clearAllFiles() {
   }
 }
 
+const MAX_NOTE_CHARS = 20000;
+
+function getNoteEdit(id) {
+  let entry = state.noteEdits.get(id);
+
+  if (!entry) {
+    entry = {
+      dirty: false,
+      saving: false,
+      pendingText: null,
+      timer: 0,
+    };
+    state.noteEdits.set(id, entry);
+  }
+
+  return entry;
+}
+
+function findNoteElement(id) {
+  return elements.notesList.querySelector(
+    `.note[data-id="${CSS.escape(id)}"]`,
+  );
+}
+
+function createNotesEmpty() {
+  const empty = document.createElement('div');
+  empty.className = 'notes-empty';
+  empty.innerHTML = `
+    <p>No notes yet</p>
+    <span>Paste text to share it with every device.</span>
+  `;
+  return empty;
+}
+
+function autoGrowNote(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+}
+
+function setNoteStatus(id, text, isError = false) {
+  const element = findNoteElement(id);
+  const status = element?.querySelector('.note-status');
+  if (!status) return;
+
+  status.textContent = text;
+  status.classList.toggle('is-error', isError);
+}
+
+function createNoteElement(note) {
+  const article = document.createElement('article');
+  article.className = 'note';
+  article.dataset.id = note.id;
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'note-text';
+  textarea.placeholder = 'Paste text here...';
+  textarea.maxLength = MAX_NOTE_CHARS;
+  textarea.spellcheck = false;
+  textarea.value = note.text;
+  textarea.setAttribute('aria-label', 'Shared note');
+
+  const foot = document.createElement('div');
+  foot.className = 'note-foot';
+
+  const status = document.createElement('span');
+  status.className = 'note-status';
+  status.dataset.updated = note.updatedAt;
+  status.textContent = `Saved · ${relativeTime(note.updatedAt)}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'note-actions';
+
+  const copyButton = document.createElement('button');
+  copyButton.type = 'button';
+  copyButton.className = 'note-button';
+  copyButton.dataset.copyNote = note.id;
+  copyButton.innerHTML = `${copyIcon}<span>Copy</span>`;
+
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'note-button is-danger';
+  deleteButton.dataset.deleteNote = note.id;
+  deleteButton.title = 'Delete note';
+  deleteButton.setAttribute('aria-label', 'Delete note');
+  deleteButton.innerHTML = trashIcon;
+
+  actions.append(copyButton, deleteButton);
+  foot.append(status, actions);
+  article.append(textarea, foot);
+
+  window.requestAnimationFrame(() => autoGrowNote(textarea));
+
+  return article;
+}
+
+function syncNoteElement(element, note) {
+  const entry = state.noteEdits.get(note.id);
+  const textarea = element.querySelector('.note-text');
+  const status = element.querySelector('.note-status');
+  const busy = Boolean(entry && (entry.dirty || entry.saving));
+
+  if (busy || !textarea || !status) return;
+
+  if (textarea.value !== note.text) {
+    textarea.value = note.text;
+    autoGrowNote(textarea);
+  }
+
+  status.dataset.updated = note.updatedAt;
+  status.textContent = `Saved · ${relativeTime(note.updatedAt)}`;
+  status.classList.remove('is-error');
+}
+
+function applyNotes() {
+  const list = elements.notesList;
+  if (!list) return;
+
+  const existing = new Map();
+  for (const element of list.querySelectorAll('.note')) {
+    existing.set(element.dataset.id, element);
+  }
+
+  if (state.notes.length === 0) {
+    state.noteEdits.clear();
+    list.replaceChildren(createNotesEmpty());
+    return;
+  }
+
+  const seen = new Set();
+
+  for (const note of [...state.notes].reverse()) {
+    seen.add(note.id);
+    const element = existing.get(note.id);
+
+    if (element) {
+      syncNoteElement(element, note);
+    } else {
+      list.prepend(createNoteElement(note));
+    }
+  }
+
+  for (const [id, element] of existing) {
+    if (!seen.has(id)) {
+      element.remove();
+      state.noteEdits.delete(id);
+    }
+  }
+
+  const empty = list.querySelector('.notes-empty');
+  if (empty) empty.remove();
+}
+
+async function refreshNotes() {
+  notesRequestId += 1;
+  const requestId = notesRequestId;
+
+  try {
+    const response = await fetch(`/api/notes?rev=${state.notesRevision}`, {
+      cache: 'no-store',
+    });
+
+    if (response.status === 204) return;
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (!Array.isArray(data.notes)) return;
+    if (requestId !== notesRequestId) return;
+
+    state.notesRevision = Number(data.revision) || 0;
+    state.notes = data.notes;
+    applyNotes();
+  } catch {
+    // The main status indicator already reports connection problems.
+  }
+}
+
+async function addNote() {
+  const button = elements.addNote;
+  if (!button || button.disabled) return;
+
+  button.disabled = true;
+
+  try {
+    const response = await fetch('/api/notes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Easy-Drop': '1',
+      },
+      body: JSON.stringify({ text: '' }),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Could not create a note.');
+    }
+
+    state.notes.unshift(data.note);
+    applyNotes();
+    refreshNotes();
+
+    const element = findNoteElement(data.note.id);
+    const textarea = element?.querySelector('.note-text');
+    if (textarea) {
+      textarea.focus();
+      autoGrowNote(textarea);
+    }
+  } catch (error) {
+    showToast(error.message || 'Could not create a note.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function queueNoteSave(id, text) {
+  const entry = getNoteEdit(id);
+  entry.dirty = true;
+  entry.pendingText = text;
+  window.clearTimeout(entry.timer);
+  entry.timer = window.setTimeout(() => flushNoteSave(id), 700);
+}
+
+async function flushNoteSave(id) {
+  const entry = getNoteEdit(id);
+  if (entry.saving || typeof entry.pendingText !== 'string') return;
+
+  const text = entry.pendingText;
+  entry.saving = true;
+
+  try {
+    const response = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Easy-Drop': '1',
+      },
+      body: JSON.stringify({ text }),
+    });
+    const data = await response.json().catch(() => null);
+
+    if (response.status === 404) {
+      entry.saving = false;
+      state.notes = state.notes.filter((note) => note.id !== id);
+      state.noteEdits.delete(id);
+      applyNotes();
+      showToast('That note was deleted on another device.', 'error');
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Could not save the note.');
+    }
+
+    entry.saving = false;
+
+    const index = state.notes.findIndex((note) => note.id === id);
+    if (index >= 0) state.notes[index] = data.note;
+
+    if (entry.pendingText === text) {
+      entry.dirty = false;
+      entry.pendingText = null;
+
+      const element = findNoteElement(id);
+      if (element) {
+        element.classList.remove('is-dirty');
+        const status = element.querySelector('.note-status');
+        if (status) {
+          status.dataset.updated = data.note.updatedAt;
+          status.textContent = `Saved · ${relativeTime(data.note.updatedAt)}`;
+          status.classList.remove('is-error');
+        }
+      }
+    } else {
+      entry.timer = window.setTimeout(() => flushNoteSave(id), 0);
+    }
+
+    refreshNotes();
+  } catch {
+    entry.saving = false;
+    setNoteStatus(id, 'Not saved - retrying', true);
+    entry.timer = window.setTimeout(() => flushNoteSave(id), 3000);
+  }
+}
+
+async function deleteNote(id, button) {
+  const element = findNoteElement(id);
+  const textarea = element?.querySelector('.note-text');
+
+  if (
+    textarea &&
+    textarea.value.trim() &&
+    !window.confirm('Delete this note for everyone?')
+  ) {
+    return;
+  }
+
+  if (button) button.disabled = true;
+
+  const entry = state.noteEdits.get(id);
+  if (entry) window.clearTimeout(entry.timer);
+
+  try {
+    const response = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'X-Easy-Drop': '1' },
+    });
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Could not delete the note.');
+    }
+
+    state.notes = state.notes.filter((note) => note.id !== id);
+    state.noteEdits.delete(id);
+    applyNotes();
+    showToast('Note deleted');
+    refreshNotes();
+  } catch (error) {
+    if (button) button.disabled = false;
+    showToast(error.message || 'Could not delete the note.', 'error');
+  }
+}
+
+async function copyNote(id) {
+  const element = findNoteElement(id);
+  const textarea = element?.querySelector('.note-text');
+  const text = textarea ? textarea.value : '';
+
+  if (!text) {
+    showToast('This note is empty.');
+    return;
+  }
+
+  try {
+    await copyText(text);
+    showToast('Note copied');
+  } catch {
+    showToast('Could not copy. Select the text manually.', 'error');
+  }
+}
+
 function bindEvents() {
   elements.sendButton.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -728,17 +1094,66 @@ function bindEvents() {
 
   elements.clearAll.addEventListener('click', clearAllFiles);
 
+  elements.addNote.addEventListener('click', addNote);
+
+  elements.notesList.addEventListener('input', (event) => {
+    const textarea = event.target.closest('textarea.note-text');
+    if (!textarea) return;
+
+    const element = textarea.closest('.note');
+    if (!element) return;
+
+    element.classList.add('is-dirty');
+    setNoteStatus(element.dataset.id, 'Saving...');
+    autoGrowNote(textarea);
+    queueNoteSave(element.dataset.id, textarea.value);
+  });
+
+  elements.notesList.addEventListener('focusout', (event) => {
+    const textarea = event.target.closest('textarea.note-text');
+    if (!textarea) return;
+
+    const element = textarea.closest('.note');
+    if (!element) return;
+
+    const entry = state.noteEdits.get(element.dataset.id);
+    if (!entry || !entry.dirty || entry.saving) return;
+
+    window.clearTimeout(entry.timer);
+    flushNoteSave(element.dataset.id);
+  });
+
+  elements.notesList.addEventListener('click', (event) => {
+    const copyButton = event.target.closest('button[data-copy-note]');
+    if (copyButton) {
+      copyNote(copyButton.dataset.copyNote);
+      return;
+    }
+
+    const deleteButton = event.target.closest('button[data-delete-note]');
+    if (deleteButton) {
+      deleteNote(deleteButton.dataset.deleteNote, deleteButton);
+    }
+  });
+
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshState(true);
+    if (!document.hidden) {
+      refreshState(true);
+      refreshNotes();
+    }
   });
 }
 
 function init() {
   bindEvents();
   refreshState(false);
+  refreshNotes();
 
   window.setInterval(() => {
-    if (!document.hidden) refreshState(true);
+    if (!document.hidden) {
+      refreshState(true);
+      refreshNotes();
+    }
   }, 3000);
 }
 

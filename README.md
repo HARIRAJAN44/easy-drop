@@ -1,14 +1,16 @@
 # Easy Drop
 
-A temporary file drop you can open from any phone, tablet, or computer. Run it
-on one machine, share the address or public link, and every device sees the same
-drop: send files on one device, then download them on another.
+A temporary file and text drop you can open from any phone, tablet, or
+computer. Run it on one machine, share the address or public link, and every
+device sees the same drop: send files on one device, then download them on
+another. You can also keep shared text notes that sync to every device.
 
 - Works on your local network without an internet connection.
 - Creates a temporary public link through a Cloudflare tunnel, so devices on
   other networks can join too.
+- Shared text notes save automatically and appear on every device.
 - No accounts, no build step, and no npm dependencies.
-- Files are stored in a temporary folder and deleted when the app stops.
+- Files and notes are temporary and deleted when the app stops.
 
 ## Requirements
 
@@ -68,8 +70,19 @@ When using localtunnel, visitors may be asked for a password. Open
 - Files appear in the shared **Files** list for every connected device.
 - Tap **Download** next to a file to save it.
 - **Clear all** removes the current drop immediately.
-- Everything is stored in a temporary folder and deleted when Easy Drop stops.
-  Any leftover temporary folder is also removed the next time it starts.
+
+### Shared text
+
+- Click **New** in the **Shared text** card to add a note.
+- Paste or type; the note saves automatically about a second after you stop
+  typing, and other devices see it within a few seconds.
+- **Copy** puts a note on your clipboard; the trash button deletes it for
+  everyone.
+- You can keep up to 50 notes, with 20,000 characters per note.
+- Notes are temporary and live only while Easy Drop is running.
+
+Files are stored in a temporary folder and deleted when Easy Drop stops. Any
+leftover temporary folder is also removed the next time it starts.
 
 ## Configuration
 

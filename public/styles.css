@@ -285,11 +285,14 @@ svg {
 }
 
 .send-card {
+  display: flex;
+  flex-direction: column;
   padding: 14px;
 }
 
 .dropzone {
   display: flex;
+  flex: 1;
   min-height: 292px;
   flex-direction: column;
   align-items: center;
@@ -392,6 +395,215 @@ svg {
   margin: 13px 0 0;
   color: var(--muted);
   font-size: 11.5px;
+}
+
+.side-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notes-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.notes-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notes-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.notes-meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.note-add {
+  display: inline-flex;
+  min-height: 30px;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.note-add:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.note-add:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.note-add svg {
+  width: 13px;
+  height: 13px;
+}
+
+.notes-list {
+  display: flex;
+  max-height: min(56vh, 520px);
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-right: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.note {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-solid) 82%, transparent);
+  transition: border-color 160ms ease;
+}
+
+.note:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+}
+
+.note.is-dirty {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+.note-text {
+  display: block;
+  width: 100%;
+  min-height: 62px;
+  max-height: 200px;
+  padding: 10px 11px 4px;
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+}
+
+.note-text::placeholder {
+  color: var(--muted);
+}
+
+.note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 8px 11px;
+}
+
+.note-status {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-status.is-error {
+  color: var(--danger);
+}
+
+.note-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.note-button {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.note-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.note-button.is-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 26%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.note-button:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.note-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.notes-empty {
+  display: flex;
+  min-height: 148px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 18px 10px;
+  text-align: center;
+}
+
+.notes-empty p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.notes-empty span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .connect-card {
@@ -914,7 +1126,7 @@ svg {
   }
 
   .send-grid {
-    grid-template-columns: minmax(0, 1fr) 228px;
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 
   .dropzone {
